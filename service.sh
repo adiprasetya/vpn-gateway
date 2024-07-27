@@ -1,6 +1,7 @@
 #!/system/bin/sh
 
 TUN_NAME=tun0
+SUBLAN="192.168.43.0/25" # 192.168.43.1 - 192.168.43.127 = TUNNELED |  192.168.43.127 - 192.168.43.254 = DIRECT
 
 ip="/system/bin/ip"
 iptables="/system/bin/iptables"
@@ -31,7 +32,7 @@ iif $tun_name lookup main suppress_prefixlength 0 pref 5010
 iif $tun_name goto 6000 pref 5020
 from 10.0.0.0/8 lookup $tun_table_index pref 5030
 from 172.16.0.0/12 lookup $tun_table_index pref 5040
-from 192.168.0.0/16 lookup $tun_table_index pref 5050
+from $SUBLAN lookup $tun_table_index pref 5050
 nop pref 6000
 EOF
 }
@@ -42,11 +43,11 @@ function iptables_rules_for() {
     cat <<EOF
 FORWARD -s 10.0.0.0/8 -o $tun_name -j ACCEPT
 FORWARD -s 172.16.0.0/12 -o $tun_name -j ACCEPT
-FORWARD -s 192.168.0.0/16 -o $tun_name -j ACCEPT
+FORWARD -s $SUBLAN -o $tun_name -j ACCEPT
 FORWARD -i $tun_name -j ACCEPT
 PREROUTING -t nat ! -i $tun_name -s 10.0.0.0/8 -p udp --dport 53 -j DNAT --to 1.1.1.1
 PREROUTING -t nat ! -i $tun_name -s 172.16.0.0/12 -p udp --dport 53 -j DNAT --to 1.1.1.1
-PREROUTING -t nat ! -i $tun_name -s 192.168.0.0/16 -p udp --dport 53 -j DNAT --to 1.1.1.1
+PREROUTING -t nat ! -i $tun_name -s $SUBLAN -p udp --dport 53 -j DNAT --to 1.1.1.1
 EOF
 }
 
@@ -109,7 +110,7 @@ fi
 echo 1 > /proc/sys/net/ipv4/ip_forward
 echo 0 > /dev/ip_forward_stub
 chown $(stat -c '%u:%g' /data/misc/net/rt_tables) /dev/ip_forward_stub
-chcon $(stat -Z -c '%C' /data/misc/net/rt_tables) /dev/ip_forward_stub
+chcon $(stat -c '%C' /data/misc/net/rt_tables) /dev/ip_forward_stub
 mount -o bind /dev/ip_forward_stub /proc/sys/net/ipv4/ip_forward
 
 inotifyd - /data/misc/net::w | while read -r event; do
